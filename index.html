@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>红蓝康威生命游戏 · 离线版</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0c1220; --panel:#151f31; --panel2:#1c2940; --line:#2c3a52; --text:#e8eef8; --muted:#a8b5c9; --accent:#74a7ff; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font:14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    body { display:flex; flex-direction:column; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
+    header { flex:0 0 auto; max-height:58dvh; overflow:auto; padding:10px 12px 8px; background:linear-gradient(180deg,#18243a,#111a2a); border-bottom:1px solid var(--line); }
+    .titleRow { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; }
+    h1 { font-size:17px; margin:0; font-weight:700; letter-spacing:.02em; }
+    .status { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .stats { display:flex; flex-wrap:wrap; gap:6px 14px; color:#d8e2f1; font-size:12px; margin:4px 0 8px; }
+    .stats b { color:#fff; font-variant-numeric:tabular-nums; }
+    .toolbar { display:grid; gap:7px; }
+    .actions { display:flex; flex-wrap:wrap; gap:6px; }
+    button, input, summary { font:inherit; }
+    button { border:1px solid #40516c; background:var(--panel2); color:var(--text); border-radius:8px; min-height:38px; padding:7px 10px; cursor:pointer; touch-action:manipulation; }
+    button:hover { border-color:#86adf5; background:#263954; }
+    button:active { transform:translateY(1px); }
+    button.primary { background:#264979; border-color:#4776b7; }
+    button.selected { outline:2px solid #f6d45c; outline-offset:1px; background:#344967; }
+    button[data-brush="0"].selected { background:#792f40; }
+    button[data-brush="1"].selected { background:#244c82; }
+    button[data-brush="2"].selected { background:#285d40; }
+    button[data-brush="3"].selected { background:#65551e; }
+    button[data-brush="4"].selected { background:#30343c; }
+    .brushes { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:6px; }
+    .brushes button { padding:6px 4px; font-size:12px; min-height:40px; }
+    .speedRow { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:9px; color:var(--muted); }
+    input[type="range"] { width:100%; accent-color:var(--accent); }
+    #speedValue { min-width:78px; text-align:right; color:#e6edf8; font-variant-numeric:tabular-nums; }
+    .panels { display:flex; flex-wrap:wrap; gap:7px; }
+    details { background:rgba(255,255,255,.035); border:1px solid var(--line); border-radius:8px; padding:0 9px; }
+    details > summary { cursor:pointer; color:#d9e4f4; padding:7px 0; user-select:none; }
+    .panelContent { padding:0 0 8px; }
+    .formRow { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:4px 0; }
+    .formRow label { color:var(--muted); }
+    input[type="number"], input[type="text"] { width:76px; padding:6px 7px; border-radius:6px; border:1px solid #40516c; background:#0e1727; color:var(--text); }
+    .ratio { width:70px!important; }
+    .ruleGrid { display:grid; grid-template-columns:repeat(9,minmax(28px,1fr)); gap:4px; }
+    .ruleGrid label { display:flex; align-items:center; justify-content:center; gap:3px; min-height:31px; background:#1b2940; border:1px solid #354560; border-radius:6px; color:#e1e9f5; }
+    .ruleGrid input { accent-color:var(--accent); margin:0; }
+    .ruleHeading { color:var(--muted); font-size:12px; margin:5px 0 4px; }
+    #hint { font-size:11px; color:#91a0b7; margin-top:1px; }
+    #board { flex:1 1 auto; min-height:120px; position:relative; overflow:hidden; background:#0b111c; }
+    canvas { display:block; width:100%; height:100%; touch-action:none; outline:none; }
+    @media (max-width:600px) {
+      header { padding:8px 9px 7px; max-height:61dvh; }
+      .titleRow { margin-bottom:4px; }
+      h1 { font-size:15px; }
+      .status { font-size:11px; }
+      .stats { gap:4px 10px; margin:3px 0 6px; }
+      button { min-height:36px; padding:6px 8px; font-size:12px; }
+      .brushes { gap:4px; }
+      .brushes button { font-size:11px; min-height:38px; }
+      .panels { gap:5px; }
+      details { flex:1 1 100%; }
+      .ruleGrid { grid-template-columns:repeat(9,minmax(25px,1fr)); gap:3px; }
+      .ruleGrid label { min-height:29px; font-size:12px; }
+      #hint { font-size:10px; }
+    }
+    @media (max-height:520px) and (orientation:landscape) {
+      header { max-height:48dvh; padding:5px 9px; }
+      .stats { display:none; }
+      .toolbar { gap:4px; }
+      .brushes button, button { min-height:31px; padding:4px 7px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="titleRow">
+      <h1>红蓝康威生命游戏</h1>
+      <div id="runStatus" class="status">已暂停</div>
+    </div>
+    <div class="stats" aria-live="polite">
+      <span>红格总数（含死） <b id="redTotal">0</b></span>
+      <span>红活细胞 <b id="redAlive">0</b></span>
+      <span>蓝格总数（含死） <b id="blueTotal">0</b></span>
+      <span>蓝活细胞 <b id="blueAlive">0</b></span>
+    </div>
+    <div class="toolbar">
+      <div class="actions">
+        <button id="toggleRun" class="primary">▶ 开始</button>
+        <button id="prevStep">上一步</button>
+        <button id="nextStep">下一步</button>
+        <button id="recall">Q 回溯开始前</button>
+        <button id="randomize">随机新局</button>
+      </div>
+      <div id="brushes" class="brushes" role="group" aria-label="画笔选择">
+        <button data-brush="0">🔴 红色画笔</button>
+        <button data-brush="1">🔵 蓝色画笔</button>
+        <button data-brush="2">🟢 中立死亡</button>
+        <button data-brush="3">✨ 高亮格子</button>
+        <button data-brush="4">⬛ 永久死亡</button>
+      </div>
+      <div class="speedRow">
+        <label for="speed">演化速度</label>
+        <input id="speed" type="range" min="0" max="1000" value="500">
+        <span id="speedValue">6.7 步/秒</span>
+      </div>
+      <div class="panels">
+        <details>
+          <summary>棋盘大小与随机比例</summary>
+          <div class="panelContent">
+            <div class="formRow">
+              <label for="rows">行</label><input id="rows" type="number" min="3" max="100" value="30">
+              <label for="columns">列</label><input id="columns" type="number" min="3" max="100" value="50">
+              <button id="applySize">应用尺寸</button>
+            </div>
+            <div class="formRow">
+              <label>红:蓝</label><input id="colorRatio" class="ratio" type="text" value="1:1" aria-label="红蓝比例">
+              <label>活:死</label><input id="lifeRatio" class="ratio" type="text" value="1:1" aria-label="生死比例">
+              <button id="applyRatios">应用比例并随机</button>
+            </div>
+            <div id="message" class="status" aria-live="polite">比例格式示例：2:1</div>
+          </div>
+        </details>
+        <details>
+          <summary>演化规则（0–8 可多选）</summary>
+          <div class="panelContent">
+            <div class="ruleHeading">维持生存所需的活邻居数</div>
+            <div id="survivalRules" class="ruleGrid"></div>
+            <div class="ruleHeading">新细胞诞生所需的活邻居数</div>
+            <div id="birthRules" class="ruleGrid"></div>
+          </div>
+        </details>
+      </div>
+      <div id="hint">点击绘制；拖动平移；双指或鼠标滚轮缩放。电脑按 A/D 单步，Q 连续回溯，空格暂停。</div>
+    </div>
+  </header>
+  <main id="board"><canvas id="game" tabindex="0" aria-label="生命游戏棋盘"></canvas></main>
+  <script>
+  (() => {
+    'use strict';
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d', { alpha:false });
+    const ui = {
+      run:document.getElementById('toggleRun'), status:document.getElementById('runStatus'),
+      speed:document.getElementById('speed'), speedValue:document.getElementById('speedValue'),
+      rows:document.getElementById('rows'), columns:document.getElementById('columns'),
+      colorRatio:document.getElementById('colorRatio'), lifeRatio:document.getElementById('lifeRatio'),
+      message:document.getElementById('message'), redTotal:document.getElementById('redTotal'),
+      redAlive:document.getElementById('redAlive'), blueTotal:document.getElementById('blueTotal'),
+      blueAlive:document.getElementById('blueAlive')
+    };
+    let rows = 30, columns = 50;
+    let cells = new Uint8Array(rows * columns); // 0 dead, 1 red, 2 blue
+    let lastColor = new Uint8Array(rows * columns); // dead cells retain red/blue tint
+    let permanent = new Uint8Array(rows * columns);
+    let highlight = new Uint8Array(rows * columns);
+    let survival = new Set([2,3]), births = new Set([3]);
+    let brush = 0, paused = true, speed = .5, timer = 0;
+    let zoom = 1, panX = 0, panY = 0, baseSize = 8;
+    let history = [], historyIndex = -1, runStarts = [];
+    let pointers = new Map(), gesture = null;
+    let lastFrame = performance.now();
+    const maxHistory = 500;
+
+    function snapshot() { return { cells:cells.slice(), lastColor:lastColor.slice(), permanent:permanent.slice(), highlight:highlight.slice() }; }
+    function restore(s) { cells=s.cells.slice(); lastColor=s.lastColor.slice(); permanent=s.permanent.slice(); highlight=s.highlight.slice(); }
+    function saveHistory() {
+      history.splice(historyIndex + 1);
+      history.push(snapshot());
+      if (history.length > maxHistory) history.shift();
+      historyIndex = history.length - 1;
+      refreshStats();
+    }
+    function saveRunStart() {
+      runStarts.push(snapshot());
+      if (runStarts.length > maxHistory) runStarts.shift();
+    }
+    function ratio(text) {
+      const m = /^\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)\s*$/.exec(text);
+      if (!m) return null;
+      const a=Number(m[1]), b=Number(m[2]);
+      return a+b > 0 ? [a,b] : null;
+    }
+    function randomize() {
+      const colorWeights=ratio(ui.colorRatio.value), lifeWeights=ratio(ui.lifeRatio.value);
+      if (!colorWeights || !lifeWeights) { ui.message.textContent='比例格式无效，请使用例如 2:1。'; return; }
+      cells=new Uint8Array(rows*columns); lastColor=new Uint8Array(rows*columns);
+      permanent=new Uint8Array(rows*columns); highlight=new Uint8Array(rows*columns);
+      const aliveP=lifeWeights[0]/(lifeWeights[0]+lifeWeights[1]);
+      const redP=colorWeights[0]/(colorWeights[0]+colorWeights[1]);
+      for (let i=0;i<cells.length;i++) if (Math.random()<aliveP) {
+        cells[i]=Math.random()<redP?1:2; lastColor[i]=cells[i];
+      }
+      panX=0; panY=0; zoom=1; timer=0;
+      history=[]; historyIndex=-1; saveHistory();
+      runStarts=[snapshot()];
+      ui.message.textContent='已生成新局。';
+    }
+    function indexOf(x,y) { return y*columns+x; }
+    function step() {
+      const next=new Uint8Array(cells.length);
+      for (let y=0;y<rows;y++) for (let x=0;x<columns;x++) {
+        const i=indexOf(x,y);
+        if (permanent[i]) continue;
+        let n=0, red=0, blue=0;
+        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+          if (!dx && !dy) continue;
+          const nx=(x+dx+columns)%columns, ny=(y+dy+rows)%rows;
+          const v=cells[indexOf(nx,ny)];
+          if (v===1 || v===2) { n++; if (v===1) red++; else blue++; }
+        }
+        if (cells[i]===0) {
+          if (births.has(n)) next[i]=red>blue?1:2; // ties are blue, matching the Unity game
+        } else if (survival.has(n)) next[i]=cells[i];
+        if (next[i]) lastColor[i]=next[i];
+      }
+      cells=next; saveHistory();
+    }
+    function back() { if (historyIndex<=0) return; historyIndex--; restore(history[historyIndex]); timer=0; refreshStats(); }
+    function forward() { if (historyIndex>=history.length-1) return; historyIndex++; restore(history[historyIndex]); timer=0; refreshStats(); }
+    function recall() {
+      if (runStarts.length<=1) { ui.message.textContent='没有更早的开始前局面。'; return; }
+      runStarts.pop(); restore(runStarts[runStarts.length-1]);
+      history=[snapshot()]; historyIndex=0; timer=0; refreshStats();
+      ui.message.textContent='已回到上一次开始演化前的局面。';
+    }
+    function toggleRun() {
+      if (paused) { saveRunStart(); paused=false; }
+      else paused=true;
+      ui.run.textContent=paused?'▶ 开始':'Ⅱ 暂停';
+      ui.status.textContent=paused?'已暂停':'演化中'; timer=0;
+    }
+    function paintCell(x,y,which=brush) {
+      if (x<0||y<0||x>=columns||y>=rows) return;
+      const i=indexOf(x,y);
+      if (which===3) highlight[i]=highlight[i]?0:1;
+      else if (which===4) {
+        permanent[i]=permanent[i]?0:1; cells[i]=0; lastColor[i]=0;
+      } else if (which===2) { cells[i]=0; lastColor[i]=0; permanent[i]=0; }
+      else {
+        const color=which===0?1:2;
+        if (cells[i]===color) { cells[i]=0; lastColor[i]=0; }
+        else { cells[i]=color; lastColor[i]=color; }
+        permanent[i]=0;
+      }
+      saveHistory();
+    }
+    function counts() {
+      let rt=0,ra=0,bt=0,ba=0;
+      for (let i=0;i<cells.length;i++) {
+        if (lastColor[i]===1) rt++; else if (lastColor[i]===2) bt++;
+        if (cells[i]===1) ra++; else if (cells[i]===2) ba++;
+      }
+      return [rt,ra,bt,ba];
+    }
+    function refreshStats() {
+      const c=counts();
+      ui.redTotal.textContent=c[0]; ui.redAlive.textContent=c[1]; ui.blueTotal.textContent=c[2]; ui.blueAlive.textContent=c[3];
+    }
+    function resizeCanvas() {
+      const r=canvas.getBoundingClientRect(), dpr=Math.min(window.devicePixelRatio||1,2);
+      canvas.width=Math.max(1,Math.round(r.width*dpr)); canvas.height=Math.max(1,Math.round(r.height*dpr));
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      baseSize=Math.max(1,Math.min(16,(r.width-24)/columns,(r.height-24)/rows));
+      draw();
+    }
+    function layout() {
+      const r=canvas.getBoundingClientRect(), size=baseSize*zoom;
+      const w=columns*size,h=rows*size;
+      return {r,size,left:(r.width-w)/2+panX,top:(r.height-h)/2+panY,w,h};
+    }
+    function draw() {
+      if (!canvas.width||!canvas.height) return;
+      const dpr=Math.min(window.devicePixelRatio||1,2), r=canvas.getBoundingClientRect();
+      ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle='#0b111c'; ctx.fillRect(0,0,r.width,r.height);
+      const b=layout(), gap=Math.min(1.4,Math.max(.35,b.size*.075));
+      for (let y=0;y<rows;y++) for (let x=0;x<columns;x++) {
+        const i=indexOf(x,y), v=cells[i];
+        ctx.fillStyle=permanent[i]?'#05070b':v===1?'#ff465e':v===2?'#438dff':lastColor[i]===1?'#522630':lastColor[i]===2?'#192f55':'#185332';
+        const px=b.left+x*b.size, py=b.top+y*b.size, dim=Math.max(.5,b.size-gap);
+        ctx.fillRect(px+gap/2,py+gap/2,dim,dim);
+        if (highlight[i]) {
+          ctx.strokeStyle='#ffe45c'; ctx.lineWidth=Math.max(1.4,b.size*.12);
+          ctx.strokeRect(px+gap/2+ctx.lineWidth/2,py+gap/2+ctx.lineWidth/2,Math.max(0,dim-ctx.lineWidth),Math.max(0,dim-ctx.lineWidth));
+        }
+      }
+    }
+    function point(e) { const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+    function zoomAt(p,factor) {
+      const old=layout(), gx=(p.x-old.left)/old.size, gy=(p.y-old.top)/old.size;
+      zoom=Math.max(.35,Math.min(3,zoom*factor));
+      const n=layout(); panX+=p.x-(n.left+gx*n.size); panY+=p.y-(n.top+gy*n.size); draw();
+    }
+    function dist(a,b) { return Math.hypot(a.x-b.x,a.y-b.y); }
+    function midpoint(a,b) { return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+    canvas.addEventListener('pointerdown',e=>{
+      canvas.focus({preventScroll:true}); canvas.setPointerCapture(e.pointerId);
+      const p=point(e); pointers.set(e.pointerId,p);
+      if (pointers.size===1) gesture={mode:'pending',start:p,last:p,panX,panY,button:e.button};
+      else if (pointers.size===2) {
+        const pts=[...pointers.values()]; gesture={mode:'pinch',distance:dist(pts[0],pts[1]),center:midpoint(pts[0],pts[1])};
+      } else if (gesture) gesture.mode='pinch';
+      e.preventDefault();
+    });
+    canvas.addEventListener('pointermove',e=>{
+      if (!pointers.has(e.pointerId)) return;
+      const p=point(e); pointers.set(e.pointerId,p);
+      if (pointers.size>=2) {
+        const pts=[...pointers.values()], center=midpoint(pts[0],pts[1]), d=dist(pts[0],pts[1]);
+        if (gesture && gesture.mode==='pinch' && gesture.distance>0) {
+          zoomAt(gesture.center,d/gesture.distance);
+          panX+=center.x-gesture.center.x; panY+=center.y-gesture.center.y; draw();
+        }
+        if (gesture) { gesture.mode='pinch'; gesture.distance=d; gesture.center=center; }
+      } else if (gesture && gesture.mode!=='pinch') {
+        if (dist(p,gesture.start)>6) gesture.mode='pan';
+        if (gesture.mode==='pan') { panX=gesture.panX+p.x-gesture.start.x; panY=gesture.panY+p.y-gesture.start.y; draw(); }
+      }
+      e.preventDefault();
+    });
+    function endPointer(e) {
+      const p=point(e), was=gesture;
+      pointers.delete(e.pointerId);
+      if (was && was.mode==='pending' && pointers.size===0) {
+        const b=layout(), x=Math.floor((p.x-b.left)/b.size), y=Math.floor((p.y-b.top)/b.size);
+        if (e.pointerType==='mouse' && e.button===2) paintCell(x,y,1); else paintCell(x,y,brush);
+      }
+      if (pointers.size===0) gesture=null;
+      else if (was && was.mode==='pinch') gesture={mode:'pinch',distance:0,center:[...pointers.values()][0]};
+      e.preventDefault();
+    }
+    canvas.addEventListener('pointerup',endPointer); canvas.addEventListener('pointercancel',e=>{pointers.delete(e.pointerId);gesture=null;});
+    canvas.addEventListener('contextmenu',e=>e.preventDefault());
+    canvas.addEventListener('wheel',e=>{e.preventDefault();const p=point(e);zoomAt(p,e.deltaY>0?.9:1.1);},{passive:false});
+    document.querySelectorAll('[data-brush]').forEach(button=>button.addEventListener('click',()=>{
+      brush=Number(button.dataset.brush); document.querySelectorAll('[data-brush]').forEach(b=>{
+        b.classList.toggle('selected',Number(b.dataset.brush)===brush); b.setAttribute('aria-pressed',String(Number(b.dataset.brush)===brush));
+      });
+    }));
+    document.getElementById('toggleRun').addEventListener('click',toggleRun);
+    document.getElementById('prevStep').addEventListener('click',back);
+    document.getElementById('nextStep').addEventListener('click',()=>{step();timer=0;});
+    document.getElementById('recall').addEventListener('click',recall);
+    document.getElementById('randomize').addEventListener('click',randomize);
+    document.getElementById('applySize').addEventListener('click',()=>{
+      const r=Number(ui.rows.value),c=Number(ui.columns.value);
+      if (!Number.isInteger(r)||!Number.isInteger(c)||r<3||r>100||c<3||c>100) { ui.message.textContent='行数和列数都必须为 3–100。'; return; }
+      rows=r; columns=c; resizeCanvas(); randomize();
+    });
+    document.getElementById('applyRatios').addEventListener('click',randomize);
+    function buildRules(containerId,set,name) {
+      const root=document.getElementById(containerId);
+      for (let i=0;i<=8;i++) {
+        const label=document.createElement('label'), input=document.createElement('input');
+        input.type='checkbox'; input.checked=set.has(i); input.setAttribute('aria-label',name+' '+i);
+        input.addEventListener('change',()=>input.checked?set.add(i):set.delete(i));
+        label.append(input,document.createTextNode(String(i))); root.appendChild(label);
+      }
+    }
+    buildRules('survivalRules',survival,'生存邻居数'); buildRules('birthRules',births,'诞生邻居数');
+    ui.speed.addEventListener('input',()=>{
+      speed=Number(ui.speed.value)/1000;
+      const ms=.3+(0.001-.3)*speed;
+      ui.speedValue.textContent=speed>=.999?'最快：逐帧':(1/ms).toFixed(1)+' 步/秒';
+    });
+    document.addEventListener('keydown',e=>{
+      if (e.target.closest('input,textarea,select,button,summary')) return;
+      if (e.code==='Space') { e.preventDefault(); toggleRun(); }
+      else if (e.key.toLowerCase()==='a') back();
+      else if (e.key.toLowerCase()==='d') { step(); timer=0; }
+      else if (e.key.toLowerCase()==='q') recall();
+      else if (e.key.toLowerCase()==='r') randomize();
+    });
+    function frame(now) {
+      const dt=Math.min(.1,(now-lastFrame)/1000); lastFrame=now;
+      if (!paused) {
+        if (speed>=.999) { step(); timer=0; }
+        else {
+          timer+=dt;
+          const interval=.3+(0.001-.3)*speed;
+          if (timer>=interval) { timer=0; step(); }
+        }
+      }
+      draw(); requestAnimationFrame(frame);
+    }
+    document.querySelectorAll('[data-brush="0"]')[0].classList.add('selected');
+    document.querySelectorAll('[data-brush="0"]')[0].setAttribute('aria-pressed','true');
+    randomize(); resizeCanvas(); requestAnimationFrame(frame);
+    if ('ResizeObserver' in window) new ResizeObserver(resizeCanvas).observe(document.getElementById('board'));
+    else window.addEventListener('resize',resizeCanvas);
+  })();
+  </script>
+</body>
+</html>
